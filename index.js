@@ -54,18 +54,20 @@ const server = http.createServer((req, res) => {
       fetch('/search?username=' + encodeURIComponent(username))
         .then(r => r.json())
         .then(data => {
+          console.log('Response:', data);
+          
           if (data.error) {
             document.getElementById('output').innerHTML = '<div class="error">❌ ' + data.error + '</div>';
             return;
           }
 
-          if (!data.name) {
-            document.getElementById('output').innerHTML = '<div class="error">User not found</div>';
+          if (!data.name && !data.username) {
+            document.getElementById('output').innerHTML = '<div class="error">❌ User not found or profile is private</div>';
             return;
           }
 
           let html = '<div class="result">';
-          html += '<h2>' + data.name + '</h2>';
+          html += '<h2>' + (data.name || data.username) + '</h2>';
           html += '<p style="color: #a78bfa;">@' + data.username + '</p>';
           
           if (data.avatarImage) {
@@ -99,11 +101,11 @@ const server = http.createServer((req, res) => {
     const username = query.username;
     const profileUrl = 'https://www.vrchat.com/user/' + username;
     
-    console.log('Fetching profile:', profileUrl);
+    console.log('Fetching:', profileUrl);
 
     https.get(profileUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
     }, (response) => {
       let html = '';
@@ -114,19 +116,37 @@ const server = http.createServer((req, res) => {
 
       response.on('end', () => {
         try {
-          // Extract avatar image
-          const avatarMatch = html.match(/"currentAvatarImageUrl":"([^"]+)"/);
-          const avatarImage = avatarMatch ? avatarMatch[1] : null;
+          console.log('Response length:', html.length);
+          console.log('First 500 chars:', html.substring(0, 500));
+          
+          // Try multiple parsing methods
+          let name = null;
+          let avatarImage = null;
+          let bio = null;
 
-          // Extract display name
-          const nameMatch = html.match(/"displayName":"([^"]+)"/);
-          const name = nameMatch ? nameMatch[1] : username;
+          // Method 1: Look for "displayName" in JSON
+          const nameMatch1 = html.match(/"displayName"\s*:\s*"([^"]+)"/);
+          if (nameMatch1) name = nameMatch1[1];
 
-          // Extract bio
-          const bioMatch = html.match(/"bio":"([^"]+)"/);
-          const bio = bioMatch ? bioMatch[1] : null;
+          // Method 2: Look for name in meta tags
+          const nameMatch2 = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/);
+          if (nameMatch2 && !name) name = nameMatch2[1];
 
-          if (!name || name === 'null') {
+          // Method 3: Look for avatar image
+          const avatarMatch1 = html.match(/"currentAvatarImageUrl"\s*:\s*"([^"]+)"/);
+          if (avatarMatch1) avatarImage = avatarMatch1[1];
+
+          // Method 4: Look for avatar in og:image
+          const avatarMatch2 = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/);
+          if (avatarMatch2 && !avatarImage) avatarImage = avatarMatch2[1];
+
+          // Method 5: Extract bio
+          const bioMatch = html.match(/"bio"\s*:\s*"([^"]+)"/);
+          if (bioMatch) bio = bioMatch[1];
+
+          console.log('Extracted - Name:', name, 'Avatar:', avatarImage, 'Bio:', bio);
+
+          if (!name) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'User not found or profile is private' }));
             return;
@@ -139,14 +159,16 @@ const server = http.createServer((req, res) => {
             avatarImage: avatarImage,
             bio: bio
           }));
+
         } catch (e) {
-          console.error('Parse error:', e);
+          console.error('Parse error:', e.message);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Could not parse profile' }));
+          res.end(JSON.stringify({ error: 'Could not parse profile: ' + e.message }));
         }
       });
+
     }).on('error', (err) => {
-      console.error('Fetch error:', err);
+      console.error('HTTPS error:', err.message);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Connection error: ' + err.message }));
     });
