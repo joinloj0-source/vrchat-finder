@@ -16,83 +16,78 @@ const server = http.createServer((req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width">
-  <title>VRChat Finder</title>
+  <title>VRChat Avatar Finder</title>
   <style>
     body { font-family: Arial; background: #1a1a2e; color: white; padding: 20px; }
-    .container { max-width: 500px; margin: 0 auto; }
+    .container { max-width: 600px; margin: 0 auto; }
     h1 { color: #00d4ff; text-align: center; }
-    input { width: 90%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; }
-    button { padding: 10px 20px; background: #a855f7; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    input { width: 90%; padding: 12px; margin: 10px 0; border: none; border-radius: 5px; font-size: 1em; }
+    button { padding: 12px 20px; background: #a855f7; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
     .result { background: #16213e; padding: 20px; margin-top: 20px; border-radius: 5px; border-left: 4px solid #a855f7; }
-    .error { background: #ff6b6b; padding: 10px; margin-top: 10px; border-radius: 5px; }
-    img { width: 100%; max-width: 200px; border-radius: 5px; margin: 10px 0; }
+    .error { background: #ff6b6b; color: white; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    img { width: 100%; max-width: 250px; border-radius: 5px; margin: 15px 0; }
+    h2 { color: #00d4ff; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>VRChat Avatar Finder</h1>
-    <input type="text" id="username" placeholder="Enter username..." />
-    <button onclick="doSearch()">Search</button>
+    <h1>⚡ VRChat Avatar Finder</h1>
+    <p style="text-align: center; color: #a78bfa;">Search any VRChat username</p>
+    
+    <input type="text" id="username" placeholder="Enter VRChat username..." />
+    <button onclick="search()">Search</button>
+    
     <div id="output"></div>
   </div>
 
   <script>
-    function doSearch() {
+    function search() {
       const username = document.getElementById('username').value.trim();
       
       if (!username) {
-        document.getElementById('output').innerHTML = '<div class="error">Please enter username</div>';
+        document.getElementById('output').innerHTML = '<div class="error">Please enter a username</div>';
         return;
       }
 
-      document.getElementById('output').innerHTML = '<div class="result">Searching for: ' + username + '...</div>';
+      document.getElementById('output').innerHTML = '<div class="result">Searching for "' + username + '"...</div>';
       
       fetch('/search?username=' + encodeURIComponent(username))
-        .then(r => r.text())
-        .then(text => {
-          console.log('Raw response:', text);
-          
-          try {
-            const data = JSON.parse(text);
-            console.log('Parsed data:', data);
-            
-            if (data.error) {
-              document.getElementById('output').innerHTML = '<div class="error">Error: ' + data.error + '</div>';
-              return;
-            }
-
-            if (data.debug) {
-              document.getElementById('output').innerHTML = '<div class="error">Debug: ' + data.debug + '</div>';
-              return;
-            }
-
-            if (!data.username && !data.displayName) {
-              document.getElementById('output').innerHTML = '<div class="error">User not found or VRChat API error</div>';
-              return;
-            }
-
-            let html = '<div class="result">';
-            html += '<h2>' + (data.displayName || data.username) + '</h2>';
-            html += '<p>@' + data.username + '</p>';
-            
-            if (data.currentAvatarImageUrl) {
-              html += '<img src="' + data.currentAvatarImageUrl + '" />';
-            }
-            
-            html += '</div>';
-            
-            document.getElementById('output').innerHTML = html;
-          } catch (e) {
-            document.getElementById('output').innerHTML = '<div class="error">Parse error: ' + e.message + '<br><br>Response: ' + text.substring(0, 200) + '</div>';
+        .then(r => r.json())
+        .then(data => {
+          if (data.error) {
+            document.getElementById('output').innerHTML = '<div class="error">❌ ' + data.error + '</div>';
+            return;
           }
+
+          if (!data.name) {
+            document.getElementById('output').innerHTML = '<div class="error">User not found</div>';
+            return;
+          }
+
+          let html = '<div class="result">';
+          html += '<h2>' + data.name + '</h2>';
+          html += '<p style="color: #a78bfa;">@' + data.username + '</p>';
+          
+          if (data.avatarImage) {
+            html += '<img src="' + data.avatarImage + '" alt="Avatar">';
+          }
+          
+          if (data.bio) {
+            html += '<p style="margin-top: 15px; color: #c084fc; font-style: italic;">' + data.bio + '</p>';
+          }
+          
+          html += '<p style="margin-top: 15px;"><a href="https://www.vrchat.com/user/' + data.username + '" target="_blank" style="color: #00d4ff;">View Full Profile →</a></p>';
+          html += '</div>';
+          
+          document.getElementById('output').innerHTML = html;
         })
         .catch(e => {
-          document.getElementById('output').innerHTML = '<div class="error">Fetch error: ' + e.message + '</div>';
+          document.getElementById('output').innerHTML = '<div class="error">Error: ' + e.message + '</div>';
         });
     }
 
     document.getElementById('username').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') doSearch();
+      if (e.key === 'Enter') search();
     });
   </script>
 </body>
@@ -102,50 +97,58 @@ const server = http.createServer((req, res) => {
 
   if (pathname === '/search' && query.username) {
     const username = query.username;
+    const profileUrl = 'https://www.vrchat.com/user/' + username;
     
-    console.log('=== Searching for user:', username);
+    console.log('Fetching profile:', profileUrl);
 
-    const apiUrl = 'https://api.vrchat.cloud/api/1/users/' + username;
-    console.log('VRChat API URL:', apiUrl);
-
-    https.get(apiUrl, {
+    https.get(profileUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     }, (response) => {
-      console.log('Status code:', response.statusCode);
-      console.log('Headers:', response.headers);
-      
-      let body = '';
+      let html = '';
       
       response.on('data', (chunk) => {
-        body += chunk;
+        html += chunk;
       });
 
       response.on('end', () => {
-        console.log('Response body length:', body.length);
-        console.log('First 200 chars:', body.substring(0, 200));
-        
-        if (body.includes('401') || body.includes('Unauthorized')) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'VRChat API requires authentication' }));
-          return;
-        }
+        try {
+          // Extract avatar image
+          const avatarMatch = html.match(/"currentAvatarImageUrl":"([^"]+)"/);
+          const avatarImage = avatarMatch ? avatarMatch[1] : null;
 
-        if (body.includes('404') || body.includes('Not Found')) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'User not found on VRChat' }));
-          return;
-        }
+          // Extract display name
+          const nameMatch = html.match(/"displayName":"([^"]+)"/);
+          const name = nameMatch ? nameMatch[1] : username;
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(body);
+          // Extract bio
+          const bioMatch = html.match(/"bio":"([^"]+)"/);
+          const bio = bioMatch ? bioMatch[1] : null;
+
+          if (!name || name === 'null') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'User not found or profile is private' }));
+            return;
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            username: username,
+            name: name,
+            avatarImage: avatarImage,
+            bio: bio
+          }));
+        } catch (e) {
+          console.error('Parse error:', e);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Could not parse profile' }));
+        }
       });
-
-    }).on('error', (error) => {
-      console.error('HTTPS error:', error.message);
+    }).on('error', (err) => {
+      console.error('Fetch error:', err);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Connection error: ' + error.message }));
+      res.end(JSON.stringify({ error: 'Connection error: ' + err.message }));
     });
 
     return;
@@ -156,5 +159,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(3000, () => {
-  console.log('Server running on port 3000');
+  console.log('VRChat Avatar Finder running on port 3000');
 });
