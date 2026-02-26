@@ -98,10 +98,27 @@ async function search() {
   
   try {
     const res = await fetch('/api/user?u=' + encodeURIComponent(username));
-    const data = await res.json();
+    const text = await res.text();
     
-    if (!data.username) {
-      document.getElementById('result').innerHTML = '<div class="card error">❌ User not found</div>';
+    console.log('Response status:', res.status);
+    console.log('Response text:', text);
+    
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      document.getElementById('result').innerHTML = '<div class="card error">❌ Invalid response from server</div>';
+      return;
+    }
+    
+    console.log('Data:', data);
+    
+    if (!data || !data.username) {
+      if (data && data.error) {
+        document.getElementById('result').innerHTML = '<div class="card error">❌ ' + data.error + '</div>';
+      } else {
+        document.getElementById('result').innerHTML = '<div class="card error">❌ User not found. Try: "Demo"</div>';
+      }
       return;
     }
     
@@ -128,6 +145,7 @@ async function search() {
     
     document.getElementById('result').innerHTML = html;
   } catch (e) {
+    console.error('Error:', e);
     document.getElementById('result').innerHTML = '<div class="card error">❌ Error: ' + e.message + '</div>';
   }
 }
